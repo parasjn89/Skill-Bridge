@@ -6,23 +6,35 @@ export function ScrollStackSection({ children, zIndex, bgClass = 'bg-[#10151A]',
   const contentRef = useRef(null);
 
   useEffect(() => {
-    let rafId;
+    let ticking = false;
+    let cachedOffsetTop = null;
+    let prevScale = -1;
+    let prevOpacity = -1;
+    let prevBrightness = -1;
+    let prevInScale = -1;
+    let prevInOpacity = -1;
 
-    // Spring variables
-    let currentScale = 1;
-    let currentOpacity = 1;
-    let currentBrightness = 1;
+    const measureOffset = () => {
+      if (!outerRef.current) return;
+      let offset = 0;
+      let curr = outerRef.current;
+      while (curr) {
+        offset += curr.offsetTop || 0;
+        curr = curr.offsetParent;
+      }
+      cachedOffsetTop = offset;
+    };
 
-    let inScale = 0.96;
-    let inOpacity = 0.90;
-    let inTranslateY = 0; // Keeping translateY at 0 and relying on native scroll + spring scale for the heavy feel
-
-    const tick = () => {
+    const update = () => {
+      ticking = false;
       if (!outerRef.current) return;
 
+      if (cachedOffsetTop === null) {
+        measureOffset();
+      }
+
       const vh = window.innerHeight;
-      const rect = outerRef.current.getBoundingClientRect();
-      const top = rect.top;
+      const top = (cachedOffsetTop !== null ? cachedOffsetTop : 0) - window.scrollY;
 
       // ==========================================
       // PHASE 1: OUTGOING (This section is pinned, next is sliding over)
@@ -64,36 +76,55 @@ export function ScrollStackSection({ children, zIndex, bgClass = 'bg-[#10151A]',
       }
 
       // ==========================================
-      // SPRING PHYSICS (Lerp)
-      // ==========================================
-      const lerp = (curr, target, speed) => curr + (target - curr) * speed;
-      
-      currentScale = lerp(currentScale, targetScale, 0.08);
-      currentOpacity = lerp(currentOpacity, targetOpacity, 0.08);
-      currentBrightness = lerp(currentBrightness, targetBrightness, 0.08);
-
-      inScale = lerp(inScale, targetInScale, 0.06); 
-      inOpacity = lerp(inOpacity, targetInOpacity, 0.08);
-
-      // ==========================================
-      // APPLY DOM TRANSFORMS
+      // APPLY DOM TRANSFORMS ONLY ON CHANGE
       // ==========================================
       if (contentRef.current && !isLast) {
-        contentRef.current.style.transform = `scale(${currentScale}) translateZ(-10px)`;
-        contentRef.current.style.opacity = currentOpacity.toFixed(3);
-        contentRef.current.style.filter = `brightness(${currentBrightness.toFixed(3)})`;
+        if (targetScale !== prevScale || targetBrightness !== prevBrightness) {
+          contentRef.current.style.transform = `scale(${targetScale.toFixed(4)}) translateZ(-10px)`;
+          contentRef.current.style.filter = `brightness(${targetBrightness.toFixed(3)})`;
+          prevScale = targetScale;
+          prevBrightness = targetBrightness;
+        }
+        if (targetOpacity !== prevOpacity) {
+          contentRef.current.style.opacity = targetOpacity.toFixed(3);
+          prevOpacity = targetOpacity;
+        }
       }
 
       if (incomingRef.current) {
-        incomingRef.current.style.transform = `translateY(${inTranslateY}px) scale(${inScale}) translateZ(0)`;
-        incomingRef.current.style.opacity = inOpacity.toFixed(3);
+        if (targetInScale !== prevInScale) {
+          incomingRef.current.style.transform = `scale(${targetInScale.toFixed(4)}) translateZ(0)`;
+          prevInScale = targetInScale;
+        }
+        if (targetInOpacity !== prevInOpacity) {
+          incomingRef.current.style.opacity = targetInOpacity.toFixed(3);
+          prevInOpacity = targetInOpacity;
+        }
       }
-
-      rafId = requestAnimationFrame(tick);
     };
 
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
+    const onScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(update);
+        ticking = true;
+      }
+    };
+
+    const onResize = () => {
+      measureOffset();
+      onScroll();
+    };
+
+    measureOffset();
+    update();
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+    };
   }, [isLast]);
 
   if (isLast) {

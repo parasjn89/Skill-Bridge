@@ -11,6 +11,7 @@ import {
   Bell,
   Palette,
   User,
+  UserCheck,
   Check,
   Smartphone,
   Compass,

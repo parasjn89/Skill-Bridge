@@ -6,10 +6,24 @@ export function LandingNavbar({ onNavigate }) {
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
+    let ticking = false;
+    let currentScrolled = false;
+
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const nextScrolled = window.scrollY > 10;
+          if (nextScrolled !== currentScrolled) {
+            currentScrolled = nextScrolled;
+            setIsScrolled(nextScrolled);
+          }
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
-    window.addEventListener('scroll', handleScroll);
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
